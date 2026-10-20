@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Practica 6 - Servicio Web REST</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+.header { background: linear-gradient(135deg, #1e293b 0%, #334155 100%); padding: 24px; text-align: center; border-bottom: 2px solid #3b82f6; }
+.header h1 { font-size: 1.5rem; color: #93c5fd; }
+.header p { color: #94a3b8; font-size: 0.85rem; margin-top: 4px; }
+.container { max-width: 900px; margin: 30px auto; padding: 0 20px; }
+.card { background: #1e293b; border-radius: 12px; padding: 24px; margin-bottom: 20px; border: 1px solid #334155; }
+.card h2 { color: #60a5fa; margin-bottom: 16px; font-size: 1.1rem; }
+.form-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+.form-group { flex: 1; min-width: 150px; }
+.form-group label { display: block; color: #94a3b8; font-size: 0.8rem; margin-bottom: 4px; }
+.form-group input, .form-group select { width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid #475569; border-radius: 8px; color: #e2e8f0; font-size: 0.95rem; }
+.form-group input:focus { outline: none; border-color: #3b82f6; }
+.btn { padding: 10px 24px; border: none; border-radius: 8px; font-size: 0.95rem; cursor: pointer; font-weight: 600; transition: all 0.2s; }
+.btn-primary { background: #3b82f6; color: white; }
+.btn-primary:hover { background: #2563eb; }
+.btn-primary:disabled { background: #475569; cursor: not-allowed; }
+.btn-secondary { background: #334155; color: #93c5fd; }
+.btn-secondary:hover { background: #475569; }
+.status-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.status-item { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px 16px; flex: 1; min-width: 120px; text-align: center; }
+.status-item .label { color: #94a3b8; font-size: 0.7rem; text-transform: uppercase; }
+.status-item .value { color: #60a5fa; font-size: 1.3rem; font-weight: 700; margin-top: 2px; }
+.result-box { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 16px; margin-top: 16px; max-height: 500px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.85rem; white-space: pre-wrap; line-height: 1.5; }
+.result-box.ok { border-color: #22c55e; }
+.result-box.error { border-color: #ef4444; color: #fca5a5; }
+.spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid #475569; border-top: 2px solid #3b82f6; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 8px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+.tag-local { background: #166534; color: #86efac; }
+.tag-delegado { background: #854d0e; color: #fde047; }
+.tag-fallback { background: #7f1d1d; color: #fca5a5; }
+.tiempo { color: #94a3b8; font-size: 0.8rem; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+    <h1>Practica 6 - Servicio Web REST API</h1>
+    <p>Sistemas Distribuidos | ESCOM IPN | Grupo 7CM1 | Moreno Zarate Israel</p>
+</div>
+
+<div class="container">
+    <div class="status-bar" id="statusBar">
+        <div class="status-item"><div class="label">Nodo</div><div class="value" id="stNodo">-</div></div>
+        <div class="status-item"><div class="label">Semaforo</div><div class="value" id="stSem">-</div></div>
+        <div class="status-item"><div class="label">En cola</div><div class="value" id="stCola">-</div></div>
+        <div class="status-item"><div class="label">Pares</div><div class="value" id="stPares">-</div></div>
+    </div>
+
+    <div class="card">
+        <h2>Calcular numeros primos</h2>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Servidor (URL base)</label>
+                <input type="text" id="serverUrl" placeholder="http://localhost:8080">
+            </div>
+            <div class="form-group">
+                <label>Limite superior</label>
+                <input type="number" id="limite" value="50" min="2">
+            </div>
+            <div class="form-group">
+                <label>Numero de hilos</label>
+                <input type="number" id="hilos" value="4" min="1">
+            </div>
+            <div>
+                <button class="btn btn-primary" id="btnCalc" onclick="calcular()">Calcular</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" id="resultCard" style="display:none;">
+        <h2>Resultado</h2>
+        <div id="resultInfo"></div>
+        <div class="result-box" id="resultBox"></div>
+        <div class="tiempo" id="tiempoInfo"></div>
+    </div>
+
+    <div class="card">
+        <h2>Historial de solicitudes</h2>
+        <div id="historial" style="color: #64748b; font-size: 0.9rem;">Sin solicitudes aun.</div>
+    </div>
+</div>
+
+<script>
+var baseUrl = '';
+var historial = [];
+var reqCount = 0;
+
+window.onload = function() {
+    var url = window.location.origin;
+    document.getElementById('serverUrl').value = url;
+    baseUrl = url;
+    cargarEstado();
+    setInterval(cargarEstado, 5000);
+};
+
+function cargarEstado() {
+    var url = document.getElementById('serverUrl').value || baseUrl;
+    fetch(url + '/api/estado')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            document.getElementById('stNodo').textContent = d.nodo || '-';
+            document.getElementById('stSem').textContent = d.semaforo;
+            document.getElementById('stCola').textContent = d.cola || '-';
+            document.getElementById('stPares').textContent = d.pares;
+        })
+        .catch(function() {
+            document.getElementById('stNodo').textContent = '?';
+        });
+}
+
+function calcular() {
+    var url = document.getElementById('serverUrl').value;
+    var limite = document.getElementById('limite').value;
+    var hilos = document.getElementById('hilos').value;
+    var btn = document.getElementById('btnCalc');
+    var card = document.getElementById('resultCard');
+    var box = document.getElementById('resultBox');
+    var info = document.getElementById('resultInfo');
+    var tiempo = document.getElementById('tiempoInfo');
+
+    btn.disabled = true;
+    btn.textContent = 'Procesando...';
+    card.style.display = 'block';
+    box.className = 'result-box';
+    info.innerHTML = '<div class="spinner"></div> Enviando solicitud a ' + url + '...';
+    box.textContent = '';
+    tiempo.textContent = '';
+
+    var t0 = Date.now();
+    reqCount++;
+    var reqId = reqCount;
+
+    fetch(url + '/api/primos?limite=' + limite + '&hilos=' + hilos)
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            var dt = ((Date.now() - t0) / 1000).toFixed(2);
+            btn.disabled = false;
+            btn.textContent = 'Calcular';
+
+            if (d.ok) {
+                box.className = 'result-box ok';
+                var tag = '';
+                if (d.tipo === 'local') tag = '<span class="tag tag-local">LOCAL</span>';
+                else if (d.delegadoPor) tag = '<span class="tag tag-delegado">DELEGADO</span>';
+                else if (d.tipo === 'fallback_local') tag = '<span class="tag tag-fallback">FALLBACK</span>';
+
+                info.innerHTML = tag + ' Nodo ' + d.nodo + ' | Primos: ' + d.totalPrimos + ' | Suma: ' + d.suma;
+                box.textContent = d.detalle || 'Sin detalle';
+
+                if (d.delegadoPor) {
+                    box.textContent += '\n\n>> Delegado por Nodo ' + d.delegadoPor + ' -> procesado por Nodo ' + d.procesadoPor;
+                    box.textContent += '\n>> Esquema: ' + d.esquema;
+                }
+            } else {
+                box.className = 'result-box error';
+                info.innerHTML = 'Error';
+                box.textContent = d.error || 'Error desconocido';
+            }
+
+            tiempo.textContent = 'Tiempo: ' + dt + ' segundos';
+
+            historial.unshift({id: reqId, limite: limite, hilos: hilos, dt: dt, ok: d.ok, nodo: d.nodo, tipo: d.tipo || 'error', total: d.totalPrimos || 0});
+            renderHistorial();
+        })
+        .catch(function(e) {
+            btn.disabled = false;
+            btn.textContent = 'Calcular';
+            box.className = 'result-box error';
+            info.innerHTML = 'Error de conexion';
+            box.textContent = e.message;
+            tiempo.textContent = '';
+        });
+}
+
+function renderHistorial() {
+    var el = document.getElementById('historial');
+    if (historial.length === 0) { el.innerHTML = 'Sin solicitudes aun.'; return; }
+    var html = '<table style="width:100%;font-size:0.8rem;border-collapse:collapse;">';
+    html += '<tr style="color:#64748b;"><th style="text-align:left;padding:4px;">#</th><th>Limite</th><th>Hilos</th><th>Nodo</th><th>Tipo</th><th>Primos</th><th>Tiempo</th></tr>';
+    for (var i = 0; i < historial.length && i < 20; i++) {
+        var h = historial[i];
+        var color = h.ok ? '#86efac' : '#fca5a5';
+        html += '<tr style="color:' + color + ';border-top:1px solid #334155;">';
+        html += '<td style="padding:4px;">' + h.id + '</td>';
+        html += '<td style="text-align:center;">' + h.limite + '</td>';
+        html += '<td style="text-align:center;">' + h.hilos + '</td>';
+        html += '<td style="text-align:center;">' + h.nodo + '</td>';
+        html += '<td style="text-align:center;">' + h.tipo + '</td>';
+        html += '<td style="text-align:center;">' + h.total + '</td>';
+        html += '<td style="text-align:center;">' + h.dt + 's</td>';
+        html += '</tr>';
+    }
+    html += '</table>';
+    el.innerHTML = html;
+}
+</script>
+</body>
+</html>
